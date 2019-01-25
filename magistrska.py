@@ -64,7 +64,6 @@ def naive_forecast(data,train_size,time_horizons,location,from_date,to_date):
     for i,test_value in enumerate(test_data.values[time_horizons[-1]:]):
         actual_values.append(test_value[0])
 
-
         predicted['index'].append(test_data.iloc[i].name)
         predicted['actual'].append(test_value[0])
 
@@ -75,7 +74,6 @@ def naive_forecast(data,train_size,time_horizons,location,from_date,to_date):
     end = time.time()
 
     #we create pandas dataframe with all predictions stored in it
-
     naive_forecast = pd.DataFrame(predicted)
     naive_forecast.set_index('index', inplace=True)
 
@@ -85,9 +83,13 @@ def naive_forecast(data,train_size,time_horizons,location,from_date,to_date):
 
     # RMSE estimation for each time horizon
     for time_frame in time_horizons:
-        results[time_frame] = sqrt(
-            mean_squared_error(naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
-                               naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+        all = sqrt(mean_squared_error(naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
+                                      naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+
+        peak =  peak_estimation(naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values,
+                                naive_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values)
+
+        results[time_frame] = ("%.2f" % round(all,1),"%.2f" % round(peak,1))
 
     #naive_forecast.plot()
     #plt.show()
@@ -145,8 +147,14 @@ def ARIMA_forecast(data,train_size,time_horizons,ARIMA_params,location,from_date
 
     # RMSE estimation for each time horizon
     for time_frame in time_horizons:
-        results[time_frame] = sqrt(mean_squared_error(arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
-                                                      arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+        all = sqrt(
+            mean_squared_error(arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
+                               arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+
+        peak = peak_estimation(arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values,
+                               arima_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values)
+
+        results[time_frame] = ("%.2f" % round(all, 1), "%.2f" % round(peak, 1))
 
     # time measurament
     results["time_elapsed"] = end - start
@@ -226,9 +234,14 @@ def ARIMAX_forecast(data,train_size,time_horizons,ARIMAX_params,location,from_da
 
     # RMSE estimation for each time horizon
     for time_frame in time_horizons:
-        results[time_frame] = sqrt(
+        all = sqrt(
             mean_squared_error(arimax_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
                                arimax_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+
+        peak = peak_estimation(arimax_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values,
+                               arimax_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values)
+
+        results[time_frame] = ("%.2f" % round(all, 1), "%.2f" % round(peak, 1))
 
     # time measurament
     results["time_elapsed"] = end - start
@@ -284,9 +297,14 @@ def VAR_forecast(data,train_size,features,time_horizons,VAR_params,location,from
 
     # RMSE estimation for each time horizon
     for time_frame in time_horizons:
-        results[time_frame] = sqrt(
+        all = sqrt(
             mean_squared_error(var_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
                                var_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+
+        peak = peak_estimation(var_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values,
+                               var_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values)
+
+        results[time_frame] = ("%.2f" % round(all, 1), "%.2f" % round(peak, 1))
 
     # time measurament
     results["time_elapsed"] = end - start
@@ -393,9 +411,14 @@ def LSTM_forecast(data,train_size,features,time_horizons,LSTM_params,location,fr
 
     # RMSE estimation for each time horizon
     for time_frame in time_horizons:
-        results[time_frame] = sqrt(
+        all = sqrt(
             mean_squared_error(lstm_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values,
                                lstm_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values))
+
+        peak = peak_estimation(lstm_forecast[first_test_date + pd.DateOffset(hours=time_frame):][time_frame].values,
+                               lstm_forecast[first_test_date + pd.DateOffset(hours=time_frame):]["actual"].values)
+
+        results[time_frame] = ("%.2f" % round(all, 1), "%.2f" % round(peak, 1))
 
     # plot history
     #plt.plot(history.history['loss'], label='train')
@@ -463,7 +486,7 @@ def master_thesis_method(data,models,features,train_size,time_horizons,ARIMA_par
         model_results = forecast(data=data,train_size=train_size,model=model,features=features,time_horizons=time_horizons,
                                  ARIMA_params=ARIMA_params,ARIMAX_params=ARIMAX_params,VAR_params=VAR_params,LSTM_params=LSTM_params,
                                  location=location,from_date=from_date,to_date=to_date)
-        final_results[model] = model_results
+        final_results[(model,"peak")] = model_results
         print(model)
         print(model_results)
 
@@ -486,6 +509,26 @@ def master_thesis_method(data,models,features,train_size,time_horizons,ARIMA_par
     f.write(df_results.to_string())
     f.close()
 
+#method we use for defining how good model is in forcasting extreme (peak) values in time series data
+def peak_estimation(yhat,actual):
+    yhat_series = pd.Series(yhat).values
+    actual_series = pd.Series(actual)
+    #we define peak as values higher than 85 percentile
+    actual_peaks = actual_series.where(actual_series > actual_series.quantile(q=0.85)).values
+
+    #combine actual values and predicted values
+    combined = list(zip(actual_peaks,yhat))
+    #remove values that contains nan --> none peaks
+    res = [i for i in combined if not pd.isna(i[0])]
+    #split actual data and test data
+    res = list(zip(*res))
+    actual = list(res[0])
+    predicted = list(res[1])
+
+    #rmse of the model, only using peak values
+    return sqrt(mean_squared_error(actual,predicted))
+
+
 
 def data_preparation(data,missing_values,normalization):
     pass
@@ -495,35 +538,44 @@ def data_preparation(data,missing_values,normalization):
 ################ INPUTS ##################
 ##########################################
 
-vosnjakova_bc = read_data_bc(4)
+#3 -> Posta, Traffic
+#4 -> Vosnjakova, Traffic
+#8 -> Bezigrad, Urban Background
+#9 -> Kamniska, Urban Background
+#10 -> Golovec, Background
+#13 -> Zaloška, Traffic
 
-vosnjakova_bc.set_index('datetime',inplace=True)
-vosnjakova = vosnjakova_bc[['bc']]
-vosnjakova = vosnjakova.resample("H").mean().interpolate()
+data_bc = read_data_bc(4)
+location = "Vosnjakova"
+
+data_bc.set_index('datetime',inplace=True)
+data = data_bc[['bc']]
+data_black_carbon = data.resample("H").mean().interpolate()
 
 arso_weather = read_data_weather(8)
 arso_weather.set_index('datetime',inplace=True)
 arso_weather.drop(['location'],axis=1,inplace=True)
 arso_weather = arso_weather.resample("H").mean().interpolate()
 
-models = ["naive","ARIMA","ARIMAX","VAR","LSTM"]
-time_horizons = [3,6,12,24,48]
 from_date = "20180101"
 to_date = "20180121"
-train_size = 0.8
+
+data_black_carbon = data_black_carbon[from_date:to_date]
+data_weather = arso_weather[from_date:to_date]
+data_traffic = read_data_traffic(location="1001-156").set_index('datetime').interpolate().resample("H").mean()[from_date:to_date]
+data_combined = pd.concat([data_traffic,data_weather,data_black_carbon], axis=1, ignore_index=False).drop(["location"],axis=1)
+
+models = ["naive","ARIMA","ARIMAX","VAR","LSTM"]
+time_horizons = [3,6,12,24,48]
+train_size = 0.70
 ARIMA_params = (1,0,1)
 ARIMAX_params = (1,0,1)
 VAR_params = (1,1,1)
 #num_neurons,loss_function,optimizer,epochs,batch_size
 LSTM_params = [50,"mae","adam",10,512]
-data_vosnjakova = vosnjakova[from_date:to_date]
-data_weather = arso_weather[from_date:to_date]
-data_bleiweisova = read_data_traffic(location="1001-156").set_index('datetime').interpolate().resample("H").mean()[from_date:to_date]
-data4 = pd.concat([data_bleiweisova,data_weather,data_vosnjakova], axis=1, ignore_index=False).drop(["location"],axis=1)
 features = ["bc","pres","rh","humidity_mm","ws","wd","ws_max","glob_sev","dif_sev","temp"]
-location = "Vosnjakova"
 
-master_thesis_method(data=data4,models=models,features=features,time_horizons=time_horizons,train_size=train_size,
+master_thesis_method(data=data_combined,models=models,features=features,time_horizons=time_horizons,train_size=train_size,
                      ARIMA_params=ARIMA_params,ARIMAX_params=ARIMAX_params,VAR_params=VAR_params,
                      LSTM_params=LSTM_params,location=location,from_date=from_date,to_date=to_date,time_interval="H")
 
